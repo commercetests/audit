@@ -1,6 +1,20 @@
 import { NextResponse } from 'next/server';
 import * as cheerio from 'cheerio';
 
+// Function to get a random proxy from the list of free CORS proxies
+function getRandomProxy() {
+  // List of completely free CORS proxies
+  const proxies = [
+    'https://corsproxy.io/?',
+    'https://api.allorigins.win/raw?url=',
+    'https://thingproxy.freeboard.io/fetch/',
+    'https://cors-anywhere.herokuapp.com/',
+    'https://api.codetabs.com/v1/proxy?quest='
+  ];
+  
+  return proxies[Math.floor(Math.random() * proxies.length)];
+}
+
 // Define types
 interface RequestBody {
   url: string;
@@ -55,26 +69,46 @@ export async function POST(request: Request) {
     
     console.log(`Using language preference: ${languagePreference} for ${amazonDomain}`);
 
-    // Use a more comprehensive set of headers to mimic a real browser
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-        'Accept-Language': languagePreference,
-        'Accept-Encoding': 'gzip, deflate, br',
-        'Cache-Control': 'no-cache',
-        'Pragma': 'no-cache',
-        'Sec-Ch-Ua': '"Chromium";v="120", "Google Chrome";v="120", "Not=A?Brand";v="99"',
-        'Sec-Ch-Ua-Mobile': '?0',
-        'Sec-Ch-Ua-Platform': '"Windows"',
-        'Sec-Fetch-Dest': 'document',
-        'Sec-Fetch-Mode': 'navigate',
-        'Sec-Fetch-Site': 'none',
-        'Sec-Fetch-User': '?1',
-        'Upgrade-Insecure-Requests': '1',
-      },
-      next: { revalidate: 0 }, // Disable caching
-    });
+    // First try with a proxy
+    console.log('Attempting to fetch with proxy...');
+    const proxyUrl = getRandomProxy() + encodeURIComponent(url);
+    console.log(`Using proxy: ${proxyUrl.split('?')[0]}...`);
+    
+    let response;
+    try {
+      // Try with proxy first
+      response = await fetch(proxyUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        },
+        next: { revalidate: 0 }, // Disable caching
+      });
+      
+      console.log(`Proxy response status: ${response.status}`);
+    } catch (proxyError) {
+      console.error('Proxy fetch failed, falling back to direct fetch:', proxyError);
+      
+      // Fall back to direct fetch if proxy fails
+      response = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+          'Accept-Language': languagePreference,
+          'Accept-Encoding': 'gzip, deflate, br',
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache',
+          'Sec-Ch-Ua': '"Chromium";v="120", "Google Chrome";v="120", "Not=A?Brand";v="99"',
+          'Sec-Ch-Ua-Mobile': '?0',
+          'Sec-Ch-Ua-Platform': '"Windows"',
+          'Sec-Fetch-Dest': 'document',
+          'Sec-Fetch-Mode': 'navigate',
+          'Sec-Fetch-Site': 'none',
+          'Sec-Fetch-User': '?1',
+          'Upgrade-Insecure-Requests': '1',
+        },
+        next: { revalidate: 0 }, // Disable caching
+      });
+    }
 
     if (!response.ok) {
       return NextResponse.json(
