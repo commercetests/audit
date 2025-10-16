@@ -7,10 +7,14 @@ interface RequestBody {
 }
 
 export async function POST(request: Request) {
+  // Define a variable to store the URL outside the try block so it's accessible in the catch block
+  let requestUrl = '';
+  
   try {
     // Parse request body
     const body: RequestBody = await request.json();
     const { url } = body;
+    requestUrl = url; // Store for error handling
 
     // Validate URL - check for various Amazon domains
     const amazonDomainRegex = /amazon\.(com|ca|co\.uk|de|fr|es|it|co\.jp|com\.au|com\.br|nl|in|com\.mx|cn|sg)/i;
@@ -51,12 +55,25 @@ export async function POST(request: Request) {
     
     console.log(`Using language preference: ${languagePreference} for ${amazonDomain}`);
 
-    // Fetch the Amazon page using Next.js's built-in fetch with the appropriate language
+    // Use a more comprehensive set of headers to mimic a real browser
     const response = await fetch(url, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
         'Accept-Language': languagePreference,
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache',
+        'Sec-Ch-Ua': '"Chromium";v="120", "Google Chrome";v="120", "Not=A?Brand";v="99"',
+        'Sec-Ch-Ua-Mobile': '?0',
+        'Sec-Ch-Ua-Platform': '"Windows"',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'none',
+        'Sec-Fetch-User': '?1',
+        'Upgrade-Insecure-Requests': '1',
       },
+      next: { revalidate: 0 }, // Disable caching
     });
 
     if (!response.ok) {
@@ -271,9 +288,26 @@ export async function POST(request: Request) {
     });
     
   } catch (error) {
+    // Provide more detailed error information
     console.error('Error analyzing Amazon URL:', error);
+    
+    // Get more specific error details
+    let errorMessage = 'Failed to analyze the Amazon URL';
+    let errorDetails = '';
+    
+    if (error instanceof Error) {
+      errorMessage = error.message;
+      errorDetails = error.stack || '';
+    }
+    
+    // Return detailed error for debugging
     return NextResponse.json(
-      { message: 'Failed to analyze the Amazon URL' },
+      { 
+        message: errorMessage,
+        details: errorDetails,
+        url: requestUrl || 'No URL provided',
+        timestamp: new Date().toISOString()
+      },
       { status: 500 }
     );
   }
