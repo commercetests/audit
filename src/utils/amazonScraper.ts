@@ -1,19 +1,5 @@
 import * as cheerio from 'cheerio';
 
-// Function to get a random proxy from the list of free CORS proxies
-function getRandomProxy() {
-  // List of completely free CORS proxies
-  const proxies = [
-    'https://corsproxy.io/?',
-    'https://api.allorigins.win/raw?url=',
-    'https://thingproxy.freeboard.io/fetch/',
-    'https://cors-anywhere.herokuapp.com/',
-    'https://api.codetabs.com/v1/proxy?quest='
-  ];
-  
-  return proxies[Math.floor(Math.random() * proxies.length)];
-}
-
 export interface AmazonProductData {
   title: string;
   imageCount: number;
@@ -62,22 +48,70 @@ export async function scrapeAmazonProduct(url: string): Promise<AmazonProductDat
       languagePreference = domainLanguageMap[amazonDomain];
     }
 
-    // Use a proxy to bypass CORS and scraping restrictions
-    const proxyUrl = getRandomProxy() + encodeURIComponent(url);
-    console.log(`Using proxy: ${proxyUrl.split('?')[0]}...`);
+    // List of proxies to try
+    const proxies = [
+      'https://corsproxy.io/?',
+      'https://api.allorigins.win/raw?url=',
+      'https://corsproxy.org/?',
+      'https://bypass-cors.herokuapp.com/',
+      'https://crossorigin.me/'
+    ];
     
-    // Fetch the page through the proxy
-    const response = await fetch(proxyUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      },
-    });
+    // Try each proxy until one works
+    let html = '';
+    let response = null;
+    let lastError = null;
+    
+    for (const proxy of proxies) {
+      try {
+        const proxyUrl = proxy + encodeURIComponent(url);
+        console.log(`Trying proxy: ${proxy}...`);
+        
+        // Fetch the page through the proxy
+        response = await fetch(proxyUrl, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          },
+        });
 
-    if (!response.ok) {
-      throw new Error(`Failed to fetch Amazon page: ${response.statusText}`);
+        if (response.ok) {
+          html = await response.text();
+          console.log(`Successfully fetched with proxy: ${proxy}`);
+          break;
+        } else {
+          console.log(`Proxy ${proxy} failed with status: ${response.status}`);
+          lastError = new Error(`Failed to fetch Amazon page: ${response.statusText}`);
+        }
+      } catch (error) {
+        console.log(`Proxy ${proxy} threw an error:`, error);
+        lastError = error;
+      }
+    }
+    
+    // If all proxies failed, try direct fetch as last resort
+    if (!html) {
+      try {
+        console.log('All proxies failed, trying direct fetch...');
+        response = await fetch(url, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          },
+        });
+        
+        if (response.ok) {
+          html = await response.text();
+          console.log('Successfully fetched directly');
+        } else {
+          throw new Error(`Direct fetch failed: ${response.statusText}`);
+        }
+      } catch (directError) {
+        console.log('Direct fetch failed:', directError);
+        // If we get here, all attempts failed
+        throw lastError || directError;
+      }
     }
 
-    const html = await response.text();
+    // At this point, html should contain the page content
     const $ = cheerio.load(html);
 
     // Extract product information with multiple selector options for different Amazon domains
