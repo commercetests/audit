@@ -6,7 +6,6 @@ import AuditResults, { AuditResultData } from '@/components/AuditResults';
 import LoadingBar from '@/components/LoadingBar';
 import ContentEvaluation from '@/components/ContentEvaluation';
 import Image from 'next/image';
-import { scrapeAmazonProduct } from '@/utils/amazonScraper';
 
 export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
@@ -18,8 +17,20 @@ export default function Home() {
     setError(null);
     
     try {
-      // Use the frontend scraper directly instead of calling the API
-      const data = await scrapeAmazonProduct(url);
+      const response = await fetch('/api/analyze', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ url }),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to analyze the URL');
+      }
+      
+      const data = await response.json();
       setResults(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An unexpected error occurred');
